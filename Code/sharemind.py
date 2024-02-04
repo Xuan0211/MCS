@@ -216,9 +216,8 @@ class Sharemind(object):
         self.__S1.get_data(S1_data)
         self.__S2.get_data(S2_data)
         self.__Platform.get_data(Platform_data)
-
-        self.workers_number = len(data)
-        self.target_number = data[0]
+        
+        (self.workers_number, self.target_number)  = data.shape
 
     def multiply(self, i_1, j_1, i_2, j_2):
         """
@@ -242,3 +241,11 @@ class Sharemind(object):
 
         print(ans)
 
+
+if __name__ == '__main__':
+    sm = Sharemind()    
+    data = pd.DataFrame([[1, 2, 3, 4, 5],
+            [6, 7, 8, 9, 10]])
+    sm.data_upload(data)
+    print("workers_number: "+str(sm.workers_number))
+    print("target_number: "+str(sm.target_number))

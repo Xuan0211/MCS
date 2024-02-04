@@ -1,9 +1,8 @@
-# 这是一个示例 Python 脚本。
-
-# 按 Shift+F10 执行或将其替换为您的代码。
-# 按 双击 Shift 在所有地方搜索类、文件、工具窗口、操作和设置。
 import math
 import random
+import time
+from tqdm import tqdm, trange
+
 import matplotlib.pyplot as plt
 import numpy as np
 SEED = 1
@@ -13,7 +12,7 @@ np.random.seed(SEED)
 WORKER_NUMBER = 30
 TARGET_NUMBER = 10
 MIDDLE = 100
-BAD_CHANCE = 50
+BAD_CHANCE = 30
 APPLY_CHANCE = 40
 BAD_RANGE = 60
 GOOD_RANGE = 5
@@ -33,6 +32,12 @@ UNKNOWN_SU = 0
 UNTRUSTED_SU = 1
 TRUSTED_SU = 2
 
+worker_state = []
+
+INIT_TIME = 0
+SELECT_TIME = 1
+DISCOVERY_TIME = 2
+runtime_history = [[], [], []]
 
 def su_generation(workers_number, bad_chance):
     worker_state = []
@@ -44,10 +49,6 @@ def su_generation(workers_number, bad_chance):
         else:
             worker_state.append("good")
     return worker_state
-
-
-worker_state = su_generation(WORKER_NUMBER, BAD_CHANCE)
-
 
 def data_generation(workers_number, target_number, middle, bad_range, good_range):
     data_bank = []
@@ -111,6 +112,7 @@ def RMSE_cal(data):
 
 
 def RC(request_number):
+    init_start_time = time.clock()
     # system init
     SU_state = []
     DOT = []
@@ -124,15 +126,15 @@ def RC(request_number):
     # on start init all DOT as 0.5
     for i in range(WORKER_NUMBER - 1):
         DOT.append(0.5)
-    # init metric
-    RMSE_history = []
-    RMSE_truth_history = []
-    RMSE_truth_mean = []
-    RMSE_truth_median = []
-    correct_recognize_history = []
-    cost_history = []
 
     request_count = 0
+
+    init_end_time = time.clock()
+    init_time = init_end_time - init_start_time
+
+    recruit_time_history = []
+    truth_update_time_history = []
+
     # deal with request
     for i in range(request_number):
         request_count += 1
@@ -152,6 +154,7 @@ def RC(request_number):
                 su_apply_state.append(False)
         # upload DOT
         # calculate w mean in trusted su
+        recruit_start_time = time.clock()
         # select SU
         su_selected_state = []
         su_selected_count = 0
@@ -207,6 +210,15 @@ def RC(request_number):
                             su_selected_count += 1
                             current_sc += UNKNOWN_SU_SC
                             break
+
+        recruit_end_time = time.clock()
+        recruit_time = recruit_end_time - recruit_start_time
+
+        recruit_time_history.append(recruit_time)
+
+
+        truth_update_start_time = time.clock()
+
         w_trusted_mean = 0
         trusted_number = 0
         for su in range(WORKER_NUMBER):
@@ -245,58 +257,27 @@ def RC(request_number):
                 denominator += DOT[su]
             truth_new.append(numerator / denominator)
 
-        # TODO：mean
-        truth_mean = []
-        for target in range(TARGET_NUMBER):
-            numerator = 0
-            denominator = 0
-            for su in range(WORKER_NUMBER):
-                numerator += data[su][target]
-                denominator += 1
-            truth_mean.append(numerator / denominator)
-        # TODO：median
-        truth_median = []
-        truth_median = np.median(data, axis=0)
+        truth_update_end_time = time.clock()
+        truth_update_time = truth_update_end_time - truth_update_start_time
 
-        RMSE_history.append(RMSE_cal(truth))
-        RMSE_truth_history.append(RMSE_cal(truth_new))
-        RMSE_truth_mean.append(RMSE_cal(truth_mean))
-        RMSE_truth_median.append(RMSE_cal(truth_median))
+        truth_update_time_history.append(truth_update_time)
 
-        # calculate correct recognize
-        correct_recognize = 0
-        for su in range(WORKER_NUMBER):
-            su_class = UNKNOWN_SU
-            if worker_state[su] == "good":
-                su_class = TRUSTED_SU
-            else:
-                su_class = UNTRUSTED_SU
-            if SU_state[su] == su_class:
-                correct_recognize += 1
-        correct_recognize_history.append(correct_recognize)
-
-        cost_history.append(su_selected_count)
-
-    # plot RMSE
-    plt.figure(figsize=(12, 6))
-    plt.plot(RMSE_history, c='r')
-    plt.plot(RMSE_truth_history, c='b')
-    plt.plot(RMSE_truth_mean, c='g')
-    plt.plot(RMSE_truth_median, c='y')
-    plt.show()
-
-    plt.plot(correct_recognize_history, c='g')
-    # plot cost
-    plt.plot(cost_history, c='y')
-    plt.show()
-
-    # print DOT
-    print(DOT)
-    # print SU_state
-    print(SU_state)
+    return init_time, truth_update_time_history, recruit_time_history
 
 
+for i in tqdm(range(5, 20),  desc="RC"):
+    TARGET_NUMBER = i
+    worker_state = su_generation(WORKER_NUMBER, BAD_CHANCE)
+    init_time, select_time, discovery_time = RC(200)
+    runtime_history[INIT_TIME].append(init_time)
+    runtime_history[SELECT_TIME].append(np.array(select_time).sum())
+    runtime_history[DISCOVERY_TIME].append(np.array(discovery_time).sum())
 
-RC(400)
-
-print(worker_state)
+plt.figure(figsize=(10, 6))
+# set x-axis from 5 to 20
+plt.xticks(range(5, 21))
+plt.plot(runtime_history[INIT_TIME], label="init_time")
+plt.plot(runtime_history[SELECT_TIME], label="select_time")
+plt.plot(runtime_history[DISCOVERY_TIME], label="discovery_time")
+plt.legend()
+plt.show()
